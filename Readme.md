@@ -1,61 +1,43 @@
-# ColumnMigrate
+# t-shadow
 
-**ColumnMigrate** is a lightweight Go CLI utility for safely migrating a column's data type in PostgreSQL without locking the entire table. It handles large table migrations by avoiding full-table writes and using a batched, trigger-based approach.
+t-shadow (v1)
+Ghost-table based, low-downtime schema/type migration tool for PostgreSQL
 
-## Features
+t-shadow is a lightweight PostgreSQL schema migration utility designed to safely change column types on large tables with minimal blocking.
+It uses a shadow table, logical decoding, and a batched backfill process to migrate data without rewriting the entire source table under a lock.
 
-- Zero-downtime column type migration
-- Real-time syncing with database triggers
-- Safe, batched backfilling
-- Column swap without blocking reads or writes
+This is v1, which focuses on correctness and simplicity.
+Future versions will implement non-blocking cut-over logic and safe lock acquisition.
 
-## How It Works
+### Key Features (v1)
 
-1. Add a temporary column with the new type.
-2. Add a trigger to keep the new column in sync with the original column.
-3. Backfill existing rows in batches.
-4. Drop the trigger and original column.
-5. Rename the new column to the original name.
+Zero-lock backfill using batched reads
 
-## Usage
+Real-time change propagation via PostgreSQL logical decoding
 
-```bash
-go run main.go \
-    -conn "postgres://user:pass@localhost:5432/dbname?sslmode=disable" \
-    -table your_table \
-    -column column_to_migrate \
-    -type new_data_type \
-    -batch 1000
-```
+Shadow table creation mirroring the original table
 
-### Required Flags
+Consistent state transfer using WAL→shadow replay
 
-| Flag    | Description                        |
-|---------|------------------------------------|
-| -conn   | PostgreSQL connection string       |
-| -table  | Table containing the column        |
-| -column | Column to migrate                  |
-| -type   | New data type (e.g. `bigint`)      |
+Atomic cut-over using ALTER TABLE RENAME
 
-### Optional Flags
+Minimal downtime window (single ACCESS EXCLUSIVE lock during final swap)
 
-| Flag    | Description                        | Default |
-|---------|------------------------------------|---------|
-| -schema | Schema name                        | public  |
-| -batch  | Batch size for backfill updates    | 1000    |
+### What t-shadow solves
 
-### Example
+PostgreSQL does not allow changing column types efficiently on large tables without a full rewrite.
+t-shadow provides a safe workflow:
 
-```bash
-go run main.go \
-    -conn "postgres://postgres:password@localhost:5432/mydb?sslmode=disable" \
-    -table users \
-    -column age \
-    -type bigint
-```
+Create a shadow table with the desired schema
 
-## Notes
+Copy existing rows in batches
 
-- Ensure the new type is compatible with existing data.
-- Always run on a test environment before production.
-- Supports PostgreSQL only.
+Stream ongoing writes from WAL to the shadow table
+
+Lock table briefly
+
+Replay final changes
+
+Swap tables atomically
+
+This avoids long locks and downtime.
